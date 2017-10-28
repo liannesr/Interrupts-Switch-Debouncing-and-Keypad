@@ -1,0 +1,113 @@
+#include <msp430.h>
+#include <lcd.h>
+#include <stdio.h>
+
+unsigned char lookup[11]={'1','2','3','4','5','6','7','8','9','*','0','#'};
+char lazyCopy[16]="";
+
+int index;
+int indexOfCopy;
+int upordown;
+unsigned int returnCode;
+unsigned int scanCode;
+
+void hash(){
+    clear();
+    if(upordown == 0){
+        setCursorDown();
+        upordown++;
+    }
+    else{
+        setCursorUp();
+        upordown--;
+    }
+
+    int j=0;
+    for(j=0;j<indexOfCopy;j++){
+        writeCharacter(lazyCopy[j]);
+    }
+
+}
+void clearAdjust(){
+    clear();
+    indexOfCopy=0;
+    if(upordown == 0){
+        setCursorUp();
+    }
+    else{
+        setCursorDown();
+    }
+}
+int main(void)
+{
+
+
+    WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
+
+    initialize();               //init LCD
+
+    P2DIR = 0xF2;
+    P2OUT = 0xF0;
+    P2IE = 0x0D; //interrupt enable
+   // P2IFG=0x00;
+    __enable_interrupt(); //global interrupt enable
+    index = -1;
+    indexOfCopy=0;
+    upordown = 0;
+
+    while(1){
+        P2OUT = 0xF0;
+        __delay_cycles(1000000);//delay for debouncing
+        if(index != -1){
+            if (index == 9) {  //*
+                clearAdjust();
+            }
+            else if (index == 11)  //#
+                hash();
+            else{
+                writeCharacter(lookup[index]);
+                lazyCopy[indexOfCopy] = lookup[index]; //added lazy copy
+                indexOfCopy++;
+            }
+            index = -1;
+        }
+    }
+}
+
+
+
+#pragma vector = PORT2_VECTOR
+__interrupt void P2_ISR(void) {
+    P2IFG = 0x00;//flag interrupt
+
+    scanCode=0x10; // scanCode is 0x10
+    index=0;       // index is 0
+
+    scan: P2OUT = scanCode;       // send scan code
+    returnCode = P2IN & 0x0D;    // get return code
+
+    if((returnCode & 0x0D) == 0x00){               // if return code = 0
+        scanCode = scanCode*(2);                 //shiftleft (ponerlo en 4, cause tenemos espacio) ***** Problem 1 en el shift
+        index=index+3;
+        if((scanCode & 0xF0) > 0x80){
+            index = -1;
+        }
+        else{
+            goto scan;
+        }
+    }
+    else {                                          //---------else
+
+        if(returnCode > 0x08){
+            returnCode = 0x02;
+        }
+        else{
+            if(returnCode >= 0x04){
+                returnCode=returnCode/(2);  //shift dos veces por el pin
+            }
+            returnCode = returnCode/(2); //shift right
+        }
+        index = index + returnCode; // esto no cambia nada
+    }
+    P2IFG = 0x00;//flag interrupt jst in case it changed
+}
