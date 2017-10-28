@@ -1,0 +1,41 @@
+#include <msp430.h> 
+#include <lcd.h>
+#include <stdio.h>
+
+unsigned int counter;
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
+
+    initialize();               //init LCD
+
+    counter = 0;
+    char convInt[16];
+    unsigned int temp = 0;
+    P1DIR = 0xFB;
+    P1IE = 0x04;//pin enable
+    P1IES=0x00;
+    P1IFG=0x00;
+    __enable_interrupt();
+
+    writeMessage("0");
+    while(1){
+        if(temp != counter){
+            setCursorUp();
+            sprintf(convInt, "%d", counter);
+            writeMessage(convInt);
+            temp = counter;
+        }
+    }
+
+    return 0;
+}
+
+#pragma vector = PORT1_VECTOR
+__interrupt void P1_ISR(void) {
+        P1IFG = 0x00;
+
+        if((P1IN & 0x04) == 0x04)
+            counter++;
+}
